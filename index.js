@@ -113,7 +113,7 @@ app.post('/schedule', async (req, res) => {
     try {
       await sgMail.send({
         to: email,
-        from: "viveksharma55236@gmail.com",
+        from: mail,
         subject: `Meeting Scheduled with ${name}`,
         html: `
           <h3>Your Meeting is Scheduled!</h3>
