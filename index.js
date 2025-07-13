@@ -67,50 +67,90 @@ app.get('/auth', (req, res) => {
 // ===== CREATE CALENDAR EVENT & SEND EMAIL =====
 app.post('/schedule', async (req, res) => {
   const { name, email, dateTime } = req.body;
+  
+  let meetingScheduled = false;
+  let emailSent = false;
+  let meetLink = null;
+  let errorMessage = null;
+
   try {
     const startTime = new Date(dateTime).toISOString();
     const endTime = new Date(new Date(dateTime).getTime() + 30 * 60000).toISOString();
 
-    // Create Google Calendar Event
-    const event = await calendar.events.insert({
-      calendarId: 'primary',
-      conferenceDataVersion: 1,
-      requestBody: {
-        summary: `Meeting with ${name}`,
-        description: 'Auto-scheduled via your app',
-        start: { dateTime: startTime, timeZone: 'Asia/Kolkata' },
-        end: { dateTime: endTime, timeZone: 'Asia/Kolkata' },
-        attendees: [{ email }],
-        conferenceData: {
-          createRequest: {
-            requestId: `req-${Date.now()}`,
-            conferenceSolutionKey: { type: 'hangoutsMeet' }
+    // ===== CREATE GOOGLE CALENDAR EVENT =====
+    try {
+      const event = await calendar.events.insert({
+        calendarId: 'primary',
+        conferenceDataVersion: 1,
+        requestBody: {
+          summary: `Meeting with ${name}`,
+          description: 'Auto-scheduled via your app',
+          start: { dateTime: startTime, timeZone: 'Asia/Kolkata' },
+          end: { dateTime: endTime, timeZone: 'Asia/Kolkata' },
+          attendees: [{ email }],
+          conferenceData: {
+            createRequest: {
+              requestId: `req-${Date.now()}`,
+              conferenceSolutionKey: { type: 'hangoutsMeet' }
+            }
           }
         }
-      }
-    });
+      });
 
-    const meetLink = event.data.conferenceData.entryPoints?.[0]?.uri;
-    console.log('Meet link:', meetLink);
+      meetLink = event.data.conferenceData.entryPoints?.[0]?.uri;
+      meetingScheduled = true;
+      console.log('✅ Meeting scheduled successfully');
+      console.log('Meet link:', meetLink);
+    } catch (calendarError) {
+      console.error('❌ Calendar error:', calendarError);
+      return res.status(500).json({ 
+        error: 'Failed to create calendar event',
+        details: calendarError.message 
+      });
+    }
 
     // ===== SEND EMAIL via SendGrid =====
-    await sgMail.send({
-      to: email,
-      from: mail,
-      subject: `Meeting Scheduled with ${name}`,
-      html: `
-        <h3>Your Meeting is Scheduled!</h3>
-        <p><strong>When:</strong> ${dateTime}</p>
-        <p><strong>Meet Link:</strong> <a href="${meetLink}">${meetLink}</a></p>
-        <p>Looking forward to connecting!</p>
-      `,
-    });
-    console.log('📧 Email sent via SendGrid to:', email);
+    try {
+      await sgMail.send({
+        to: email,
+        from: "viveksharma55236@gmail.com",
+        subject: `Meeting Scheduled with ${name}`,
+        html: `
+          <h3>Your Meeting is Scheduled!</h3>
+          <p><strong>When:</strong> ${new Date(dateTime).toLocaleString()}</p>
+          <p><strong>Meet Link:</strong> <a href="${meetLink} ">${meetLink}</a></p>
+          <p>Looking forward to connecting!</p>
+        `,
+      });
+      emailSent = true;
+      console.log('📧 Email sent successfully to:', email);
+    } catch (emailError) {
+      console.error('❌ Email sending failed:', emailError);
+      // Don't throw error here - meeting is still scheduled
+    }
 
-    res.json({ message: 'Meeting scheduled & email sent!', meetLink });
+    // ===== RESPOND BASED ON RESULTS =====
+    if (meetingScheduled && emailSent) {
+      res.json({ 
+        message: 'Meeting scheduled & email sent successfully!', 
+        meetLink,
+        status: 'success'
+      });
+    } else if (meetingScheduled && !emailSent) {
+      res.json({ 
+        message: 'Meeting scheduled successfully! However, email notification could not be sent. Please save the meeting link.', 
+        meetLink,
+        status: 'partial_success',
+        warning: 'Email notification failed'
+      });
+    }
+
   } catch (err) {
-    console.error('Error scheduling:', err);
-    res.status(500).json({ error: 'Failed to create event or send email' });
+    console.error('❌ Unexpected error:', err);
+    res.status(500).json({ 
+      error: 'An unexpected error occurred',
+      details: err.message 
+    });
   }
 });
 
