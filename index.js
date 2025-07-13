@@ -31,6 +31,7 @@ const transporter = nodemailer.createTransport({
     user: process.env.G_MAIL,
     pass: process.env.SMTP_PASS, // App password (or normal SMTP password)
   },
+    timeout: 6000,
 });
 
 // ===== EMAIL TEMPLATE FUNCTION =====
