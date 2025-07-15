@@ -443,16 +443,64 @@ function generateMeetingEmail(name, dateTime, meetLink) {
   `;
 }
 
-// ===== OAUTH CALLBACK =====
+// ===== ENHANCED LOGGING UTILITY =====
+const logInfo = (section, message, data = null) => {
+  console.log(`\n🔹 [${section}] ${message}`);
+  if (data) {
+    console.log(JSON.stringify(data, null, 2));
+  }
+};
+
+const logError = (section, message, error = null) => {
+  console.error(`\n❌ [${section}] ${message}`);
+  if (error) {
+    console.error('Error details:', error.message);
+    console.error('Stack trace:', error.stack);
+  }
+};
+
+const logSuccess = (section, message, data = null) => {
+  console.log(`\n✅ [${section}] ${message}`);
+  if (data) {
+    console.log(JSON.stringify(data, null, 2));
+  }
+};
+
+// ===== OAUTH CALLBACK WITH ENHANCED LOGGING =====
 app.get("/oauth2callback", async (req, res) => {
+  logInfo("OAuth Callback", "Processing OAuth callback request");
+  logInfo("OAuth Callback", "Query parameters received:", req.query);
+  
   const { code } = req.query;
-  if (!code) return res.status(400).send("Authorization code not provided");
+  
+  if (!code) {
+    logError("OAuth Callback", "Authorization code not provided");
+    return res.status(400).send("Authorization code not provided");
+  }
+  
+  logInfo("OAuth Callback", "Authorization code received:", { code: code.substring(0, 20) + "..." });
+  
   try {
+    logInfo("OAuth Callback", "Exchanging code for tokens...");
     const { tokens } = await oauth2Client.getToken(code);
+    
+    logSuccess("OAuth Callback", "OAuth tokens received successfully");
+    logInfo("OAuth Callback", "Token details:", {
+      access_token: tokens.access_token ? tokens.access_token.substring(0, 20) + "..." : "Not received",
+      refresh_token: tokens.refresh_token ? tokens.refresh_token.substring(0, 20) + "..." : "Not received",
+      token_type: tokens.token_type,
+      expires_in: tokens.expires_in,
+      expiry_date: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : "Not set"
+    });
+    
     oauth2Client.setCredentials(tokens);
-    console.log("✅ OAuth tokens received:");
-    console.log("Access Token:", tokens.access_token);
-    console.log("Refresh Token:", tokens.refresh_token);
+    logSuccess("OAuth Callback", "Credentials set on OAuth client");
+    
+    // Full tokens for environment variables (be careful with these in production)
+    console.log("\n🔑 ENVIRONMENT VARIABLES:");
+    console.log("G_ACCESS_TOKEN=" + tokens.access_token);
+    console.log("G_REFRESH_TOKEN=" + tokens.refresh_token);
+    
     res.send(`
       <html><body>
         <h2>✅ Authorization Successful!</h2>
@@ -462,41 +510,77 @@ G_REFRESH_TOKEN=${tokens.refresh_token}
         </pre>
       </body></html>
     `);
+    
   } catch (error) {
-    console.error("OAuth error:", error);
+    logError("OAuth Callback", "OAuth authorization failed", error);
     res.status(500).send("OAuth authorization failed");
   }
 });
 
-// ===== GENERATE AUTH URL =====
+// ===== GENERATE AUTH URL WITH ENHANCED LOGGING =====
 app.get("/auth", (req, res) => {
-  const authUrl = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: [
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/calendar.events",
-    ],
-  });
-  res.json({ authUrl });
+  logInfo("Auth URL", "Generating authentication URL");
+  
+  const scopes = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.events",
+  ];
+  
+  logInfo("Auth URL", "Requested scopes:", scopes);
+  
+  try {
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      scope: scopes,
+    });
+    
+    logSuccess("Auth URL", "Authentication URL generated successfully");
+    logInfo("Auth URL", "Generated URL:", { authUrl });
+    
+    res.json({ authUrl });
+    
+  } catch (error) {
+    logError("Auth URL", "Failed to generate auth URL", error);
+    res.status(500).json({ error: "Failed to generate auth URL" });
+  }
 });
 
-// ===== CREATE CALENDAR EVENT & SEND EMAIL =====
+// ===== CREATE CALENDAR EVENT & SEND EMAIL WITH ENHANCED LOGGING =====
 app.post("/schedule", async (req, res) => {
+  logInfo("Schedule", "New meeting scheduling request received");
+  logInfo("Schedule", "Request body:", req.body);
+  
   const { name, email, dateTime } = req.body;
+  
+  // Validate input
+  if (!name || !email || !dateTime) {
+    logError("Schedule", "Missing required fields", { name: !!name, email: !!email, dateTime: !!dateTime });
+    return res.status(400).json({ error: "Missing required fields: name, email, or dateTime" });
+  }
+  
+  logInfo("Schedule", "Processing meeting for:", { name, email, dateTime });
 
   let meetingScheduled = false;
   let emailSent = false;
   let meetLink = null;
+  let calendarEventId = null;
 
   try {
+    // Calculate meeting times
     const startTime = new Date(dateTime).toISOString();
-    const endTime = new Date(
-      new Date(dateTime).getTime() + 30 * 60000
-    ).toISOString();
+    const endTime = new Date(new Date(dateTime).getTime() + 30 * 60000).toISOString();
+    
+    logInfo("Schedule", "Calculated meeting times:", {
+      startTime,
+      endTime,
+      duration: "30 minutes"
+    });
 
     // ===== CREATE GOOGLE CALENDAR EVENT =====
+    logInfo("Calendar", "Creating Google Calendar event...");
+    
     try {
-      const event = await calendar.events.insert({
+      const eventRequest = {
         calendarId: "primary",
         conferenceDataVersion: 1,
         requestBody: {
@@ -512,14 +596,28 @@ app.post("/schedule", async (req, res) => {
             },
           },
         },
-      });
-
-      meetLink = event.data.conferenceData.entryPoints?.[0]?.uri;
+      };
+      
+      logInfo("Calendar", "Event request details:", eventRequest);
+      
+      const event = await calendar.events.insert(eventRequest);
+      
+      calendarEventId = event.data.id;
+      meetLink = event.data.conferenceData?.entryPoints?.[0]?.uri;
       meetingScheduled = true;
-      console.log("✅ Meeting scheduled successfully");
-      console.log("Meet link:", meetLink);
+      
+      logSuccess("Calendar", "Meeting scheduled successfully");
+      logInfo("Calendar", "Event details:", {
+        eventId: calendarEventId,
+        meetLink,
+        status: event.data.status,
+        htmlLink: event.data.htmlLink,
+        created: event.data.created,
+        organizer: event.data.organizer
+      });
+      
     } catch (calendarError) {
-      console.error("❌ Calendar error:", calendarError);
+      logError("Calendar", "Failed to create calendar event", calendarError);
       return res.status(500).json({
         error: "Failed to create calendar event",
         details: calendarError.message,
@@ -527,39 +625,72 @@ app.post("/schedule", async (req, res) => {
     }
 
     // ===== SEND EMAIL via NodeMailer =====
+    logInfo("Email", "Sending email notification...");
+    
     try {
-      await transporter.sendMail({
+      const mailOptions = {
         from: `"Meeting Scheduler" <${mail}>`,
         to: email,
-        subject: `Meeting Scheduled - ${new Date(
-          dateTime
-        ).toLocaleDateString()}`,
+        subject: `Meeting Scheduled - ${new Date(dateTime).toLocaleDateString()}`,
         html: generateMeetingEmail(name, dateTime, meetLink),
+      };
+      
+      logInfo("Email", "Email options:", {
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        hasHtml: !!mailOptions.html
       });
+      
+      const emailResult = await transporter.sendMail(mailOptions);
       emailSent = true;
-      console.log("📧 Email sent successfully to:", email);
+      
+      logSuccess("Email", "Email sent successfully");
+      logInfo("Email", "Email result:", {
+        messageId: emailResult.messageId,
+        response: emailResult.response,
+        envelope: emailResult.envelope
+      });
+      
     } catch (emailError) {
-      console.error("❌ Email sending failed:", emailError);
+      logError("Email", "Failed to send email", emailError);
     }
 
     // ===== RESPOND BASED ON RESULTS =====
+    logInfo("Response", "Preparing response...");
+    
+    const responseData = {
+      meetingScheduled,
+      emailSent,
+      meetLink,
+      calendarEventId,
+      meetingTime: startTime,
+      attendee: { name, email }
+    };
+    
+    logInfo("Response", "Response data:", responseData);
+    
     if (meetingScheduled && emailSent) {
+      logSuccess("Response", "Complete success - meeting scheduled and email sent");
       res.json({
         message: "Meeting scheduled & email sent successfully!",
         meetLink,
+        eventId: calendarEventId,
         status: "success",
       });
     } else if (meetingScheduled && !emailSent) {
+      logSuccess("Response", "Partial success - meeting scheduled but email failed");
       res.json({
-        message:
-          "Meeting scheduled successfully! However, email notification could not be sent. Please save the meeting link.",
+        message: "Meeting scheduled successfully! However, email notification could not be sent. Please save the meeting link.",
         meetLink,
+        eventId: calendarEventId,
         status: "partial_success",
         warning: "Email notification failed",
       });
     }
+    
   } catch (err) {
-    console.error("❌ Unexpected error:", err);
+    logError("Schedule", "Unexpected error during scheduling", err);
     res.status(500).json({
       error: "An unexpected error occurred",
       details: err.message,
@@ -567,4 +698,83 @@ app.post("/schedule", async (req, res) => {
   }
 });
 
-app.listen(5001, () => console.log("🚀 Server running on port 5001"));
+// ===== SERVER STARTUP WITH ENHANCED LOGGING =====
+const PORT = 5001;
+app.listen(PORT, () => {
+  console.log(`\n🚀 =================================`);
+  console.log(`🚀 Meeting Scheduler Server Started`);
+  console.log(`🚀 =================================`);
+  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(`🔗 Local URL: http://localhost:${PORT}`);
+  console.log(`📅 Available endpoints:`);
+  console.log(`   GET  /auth - Generate OAuth URL`);
+  console.log(`   GET  /oauth2callback - OAuth callback`);
+  console.log(`   POST /schedule - Schedule meeting`);
+  console.log(`🚀 =================================\n`);
+});
+
+// ===== ADDITIONAL DEBUGGING ENDPOINTS =====
+app.get("/debug/tokens", (req, res) => {
+  logInfo("Debug", "Token status requested");
+  const credentials = oauth2Client.credentials;
+  
+  const tokenInfo = {
+    hasAccessToken: !!credentials.access_token,
+    hasRefreshToken: !!credentials.refresh_token,
+    tokenType: credentials.token_type,
+    expiryDate: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null,
+    isExpired: credentials.expiry_date ? Date.now() > credentials.expiry_date : null
+  };
+  
+  logInfo("Debug", "Current token status:", tokenInfo);
+  res.json(tokenInfo);
+});
+
+app.get("/debug/calendar", async (req, res) => {
+  logInfo("Debug", "Calendar access test requested");
+  
+  try {
+    const calendarList = await calendar.calendarList.list();
+    logSuccess("Debug", "Calendar access successful");
+    logInfo("Debug", "Available calendars:", calendarList.data.items?.map(cal => ({
+      id: cal.id,
+      summary: cal.summary,
+      primary: cal.primary
+    })));
+    
+    res.json({
+      status: "success",
+      calendars: calendarList.data.items?.length || 0
+    });
+    
+  } catch (error) {
+    logError("Debug", "Calendar access failed", error);
+    res.status(500).json({
+      status: "error",
+      error: error.message
+    });
+  }
+});
+
+// ===== ERROR HANDLING MIDDLEWARE =====
+app.use((err, req, res, next) => {
+  logError("Express", "Unhandled error", err);
+  res.status(500).json({
+    error: "Internal server error",
+    message: err.message
+  });
+});
+
+// ===== GRACEFUL SHUTDOWN =====
+process.on('SIGTERM', () => {
+  logInfo("Server", "SIGTERM received, shutting down gracefully");
+  server.close(() => {
+    logInfo("Server", "Server closed");
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  logInfo("Server", "SIGINT received, shutting down gracefully");
+  process.exit(0);
+});
