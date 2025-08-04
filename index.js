@@ -37,14 +37,20 @@ const transporter = nodemailer.createTransport({
 function generateMeetingEmail(name, dateTime, meetLink) {
   const startTime = new Date(dateTime);
   const endTime = new Date(startTime.getTime() + 30 * 60000);
-  
+
   // Format dates for calendar link
   const formatForCalendar = (date) => {
-    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
   };
-  
-  const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Meeting with ' + name)}&dates=${formatForCalendar(startTime)}/${formatForCalendar(endTime)}&details=${encodeURIComponent('Meeting scheduled via booking system.\n\nJoin here: ' + meetLink)}&location=${encodeURIComponent(meetLink)}`;
-  
+
+  const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+    "Meeting with " + name
+  )}&dates=${formatForCalendar(startTime)}/${formatForCalendar(
+    endTime
+  )}&details=${encodeURIComponent(
+    "Meeting scheduled via booking system.\n\nJoin here: " + meetLink
+  )}&location=${encodeURIComponent(meetLink)}`;
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -372,14 +378,16 @@ function generateMeetingEmail(name, dateTime, meetLink) {
                 <div class="meeting-details">
                     <div class="detail-item">
                         <span class="detail-label">Date & Time:</span>
-                        <span class="detail-value">${new Date(dateTime).toLocaleString('en-US', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            timeZoneName: 'short'
+                        <span class="detail-value">${new Date(
+                          dateTime
+                        ).toLocaleString("en-US", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          timeZoneName: "short",
                         })}</span>
                     </div>
                     
@@ -453,8 +461,8 @@ const logInfo = (section, message, data = null) => {
 const logError = (section, message, error = null) => {
   console.error(`\n❌ [${section}] ${message}`);
   if (error) {
-    console.error('Error details:', error.message);
-    console.error('Stack trace:', error.stack);
+    console.error("Error details:", error.message);
+    console.error("Stack trace:", error.stack);
   }
 };
 
@@ -468,53 +476,65 @@ const logSuccess = (section, message, data = null) => {
 // --- NEW FUNCTION TO LOG TOKENS ---
 const logTokens = (section) => {
   const credentials = oauth2Client.credentials;
-  logInfo(
-    section,
-    'Current Google OAuth Tokens',
-    {
-      accessToken: credentials.access_token ? credentials.access_token.substring(0, 20) + "..." : null,
-      refreshToken: credentials.refresh_token ? credentials.refresh_token.substring(0, 20) + "..." : null,
-      tokenExpiry: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null,
-      isExpired: credentials.expiry_date ? Date.now() > credentials.expiry_date : "unknown"
-    }
-  );
-}
+  logInfo(section, "Current Google OAuth Tokens", {
+    accessToken: credentials.access_token
+      ? credentials.access_token.substring(0, 20) + "..."
+      : null,
+    refreshToken: credentials.refresh_token
+      ? credentials.refresh_token.substring(0, 20) + "..."
+      : null,
+    tokenExpiry: credentials.expiry_date
+      ? new Date(credentials.expiry_date).toISOString()
+      : null,
+    isExpired: credentials.expiry_date
+      ? Date.now() > credentials.expiry_date
+      : "unknown",
+  });
+};
 
 // ===== OAUTH CALLBACK WITH ENHANCED LOGGING =====
 app.get("/oauth2callback", async (req, res) => {
   logInfo("OAuth Callback", "Processing OAuth callback request");
   logInfo("OAuth Callback", "Query parameters received:", req.query);
-  
+
   const { code } = req.query;
-  
+
   if (!code) {
     logError("OAuth Callback", "Authorization code not provided");
     return res.status(400).send("Authorization code not provided");
   }
-  
-  logInfo("OAuth Callback", "Authorization code received:", { code: code.substring(0, 20) + "..." });
-  
+
+  logInfo("OAuth Callback", "Authorization code received:", {
+    code: code.substring(0, 20) + "...",
+  });
+
   try {
     logInfo("OAuth Callback", "Exchanging code for tokens...");
     const { tokens } = await oauth2Client.getToken(code);
-    
+
     logSuccess("OAuth Callback", "OAuth tokens received successfully");
     logInfo("OAuth Callback", "Token details:", {
-      access_token: tokens.access_token ? tokens.access_token.substring(0, 20) + "..." : "Not received",
-      refresh_token: tokens.refresh_token ? tokens.refresh_token.substring(0, 20) + "..." : "Not received",
+      access_token: tokens.access_token
+        ? tokens.access_token.substring(0, 20) + "..."
+        : "Not received",
+      refresh_token: tokens.refresh_token
+        ? tokens.refresh_token.substring(0, 20) + "..."
+        : "Not received",
       token_type: tokens.token_type,
       expires_in: tokens.expires_in,
-      expiry_date: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : "Not set"
+      expiry_date: tokens.expiry_date
+        ? new Date(tokens.expiry_date).toISOString()
+        : "Not set",
     });
-    
+
     oauth2Client.setCredentials(tokens);
     logSuccess("OAuth Callback", "Credentials set on OAuth client");
-    
+
     // Full tokens for environment variables (be careful with these in production)
     console.log("\n🔑 ENVIRONMENT VARIABLES:");
     console.log("G_ACCESS_TOKEN=" + tokens.access_token);
     console.log("G_REFRESH_TOKEN=" + tokens.refresh_token);
-    
+
     res.send(`
       <html><body>
         <h2>✅ Authorization Successful!</h2>
@@ -524,7 +544,6 @@ G_REFRESH_TOKEN=${tokens.refresh_token}
         </pre>
       </body></html>
     `);
-    
   } catch (error) {
     logError("OAuth Callback", "OAuth authorization failed", error);
     res.status(500).send("OAuth authorization failed");
@@ -534,25 +553,24 @@ G_REFRESH_TOKEN=${tokens.refresh_token}
 // ===== GENERATE AUTH URL WITH ENHANCED LOGGING =====
 app.get("/auth", (req, res) => {
   logInfo("Auth URL", "Generating authentication URL");
-  
+
   const scopes = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/calendar.events",
   ];
-  
+
   logInfo("Auth URL", "Requested scopes:", scopes);
-  
+
   try {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
       scope: scopes,
     });
-    
+
     logSuccess("Auth URL", "Authentication URL generated successfully");
     logInfo("Auth URL", "Generated URL:", { authUrl });
-    
+
     res.json({ authUrl });
-    
   } catch (error) {
     logError("Auth URL", "Failed to generate auth URL", error);
     res.status(500).json({ error: "Failed to generate auth URL" });
@@ -563,15 +581,21 @@ app.get("/auth", (req, res) => {
 app.post("/schedule", async (req, res) => {
   logInfo("Schedule", "New meeting scheduling request received");
   logInfo("Schedule", "Request body:", req.body);
-  
+
   const { name, email, dateTime } = req.body;
-  
+
   // Validate input
   if (!name || !email || !dateTime) {
-    logError("Schedule", "Missing required fields", { name: !!name, email: !!email, dateTime: !!dateTime });
-    return res.status(400).json({ error: "Missing required fields: name, email, or dateTime" });
+    logError("Schedule", "Missing required fields", {
+      name: !!name,
+      email: !!email,
+      dateTime: !!dateTime,
+    });
+    return res
+      .status(400)
+      .json({ error: "Missing required fields: name, email, or dateTime" });
   }
-  
+
   logInfo("Schedule", "Processing meeting for:", { name, email, dateTime });
 
   let meetingScheduled = false;
@@ -580,22 +604,24 @@ app.post("/schedule", async (req, res) => {
   let calendarEventId = null;
 
   // --- LOG TOKENS BEFORE API CALLS ---
-  logTokens("Schedule");
+  logTokens("Schedule - BEFORE API Call");
 
   try {
     // Calculate meeting times
     const startTime = new Date(dateTime).toISOString();
-    const endTime = new Date(new Date(dateTime).getTime() + 30 * 60000).toISOString();
-    
+    const endTime = new Date(
+      new Date(dateTime).getTime() + 30 * 60000
+    ).toISOString();
+
     logInfo("Schedule", "Calculated meeting times:", {
       startTime,
       endTime,
-      duration: "30 minutes"
+      duration: "30 minutes",
     });
 
     // ===== CREATE GOOGLE CALENDAR EVENT =====
     logInfo("Calendar", "Creating Google Calendar event...");
-    
+
     try {
       const eventRequest = {
         calendarId: "primary",
@@ -614,15 +640,18 @@ app.post("/schedule", async (req, res) => {
           },
         },
       };
-      
+
       logInfo("Calendar", "Event request details:", eventRequest);
-      
+
       const event = await calendar.events.insert(eventRequest);
-      
+
+      // --- LOG TOKENS AFTER THE API CALL ---
+      logTokens("Schedule - AFTER API Call");
+
       calendarEventId = event.data.id;
       meetLink = event.data.conferenceData?.entryPoints?.[0]?.uri;
       meetingScheduled = true;
-      
+
       logSuccess("Calendar", "Meeting scheduled successfully");
       logInfo("Calendar", "Event details:", {
         eventId: calendarEventId,
@@ -630,9 +659,8 @@ app.post("/schedule", async (req, res) => {
         status: event.data.status,
         htmlLink: event.data.htmlLink,
         created: event.data.created,
-        organizer: event.data.organizer
+        organizer: event.data.organizer,
       });
-      
     } catch (calendarError) {
       logError("Calendar", "Failed to create calendar event", calendarError);
       return res.status(500).json({
@@ -643,52 +671,56 @@ app.post("/schedule", async (req, res) => {
 
     // ===== SEND EMAIL via NodeMailer =====
     logInfo("Email", "Sending email notification...");
-    
+
     try {
       const mailOptions = {
         from: `"Meeting Scheduler" <${mail}>`,
         to: email,
-        subject: `Meeting Scheduled - ${new Date(dateTime).toLocaleDateString()}`,
+        subject: `Meeting Scheduled - ${new Date(
+          dateTime
+        ).toLocaleDateString()}`,
         html: generateMeetingEmail(name, dateTime, meetLink),
       };
-      
+
       logInfo("Email", "Email options:", {
         from: mailOptions.from,
         to: mailOptions.to,
         subject: mailOptions.subject,
-        hasHtml: !!mailOptions.html
+        hasHtml: !!mailOptions.html,
       });
-      
+
       const emailResult = await transporter.sendMail(mailOptions);
       emailSent = true;
-      
+
       logSuccess("Email", "Email sent successfully");
       logInfo("Email", "Email result:", {
         messageId: emailResult.messageId,
         response: emailResult.response,
-        envelope: emailResult.envelope
+        envelope: emailResult.envelope,
       });
-      
     } catch (emailError) {
       logError("Email", "Failed to send email", emailError);
     }
 
     // ===== RESPOND BASED ON RESULTS =====
     logInfo("Response", "Preparing response...");
-    
+
     const responseData = {
       meetingScheduled,
       emailSent,
       meetLink,
       calendarEventId,
       meetingTime: startTime,
-      attendee: { name, email }
+      attendee: { name, email },
     };
-    
+
     logInfo("Response", "Response data:", responseData);
-    
+
     if (meetingScheduled && emailSent) {
-      logSuccess("Response", "Complete success - meeting scheduled and email sent");
+      logSuccess(
+        "Response",
+        "Complete success - meeting scheduled and email sent"
+      );
       res.json({
         message: "Meeting scheduled & email sent successfully!",
         meetLink,
@@ -696,16 +728,19 @@ app.post("/schedule", async (req, res) => {
         status: "success",
       });
     } else if (meetingScheduled && !emailSent) {
-      logSuccess("Response", "Partial success - meeting scheduled but email failed");
+      logSuccess(
+        "Response",
+        "Partial success - meeting scheduled but email failed"
+      );
       res.json({
-        message: "Meeting scheduled successfully! However, email notification could not be sent. Please save the meeting link.",
+        message:
+          "Meeting scheduled successfully! However, email notification could not be sent. Please save the meeting link.",
         meetLink,
         eventId: calendarEventId,
         status: "partial_success",
         warning: "Email notification failed",
       });
     }
-    
   } catch (err) {
     logError("Schedule", "Unexpected error during scheduling", err);
     res.status(500).json({
@@ -717,7 +752,7 @@ app.post("/schedule", async (req, res) => {
 
 // ===== SERVER STARTUP WITH ENHANCED LOGGING =====
 const PORT = 5001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n🚀 =================================`);
   console.log(`🚀 Meeting Scheduler Server Started`);
   console.log(`🚀 =================================`);
@@ -734,48 +769,58 @@ app.listen(PORT, () => {
 app.get("/debug/tokens", (req, res) => {
   logInfo("Debug", "Token status requested");
   const credentials = oauth2Client.credentials;
-  
+
   const tokenInfo = {
     hasAccessToken: !!credentials.access_token,
     hasRefreshToken: !!credentials.refresh_token,
     tokenType: credentials.token_type,
-    expiryDate: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null,
-    isExpired: credentials.expiry_date ? Date.now() > credentials.expiry_date : null
+    expiryDate: credentials.expiry_date
+      ? new Date(credentials.expiry_date).toISOString()
+      : null,
+    isExpired: credentials.expiry_date
+      ? Date.now() > credentials.expiry_date
+      : null,
   };
-  
+
   logInfo("Debug", "Current token status:", tokenInfo);
   // --- LOG FULL ACCESS TOKEN FOR DEBUGGING ---
   console.log("\n🔑 [Debug] Current Full Access Token:");
   console.log(credentials.access_token);
-  
+
   res.json(tokenInfo);
 });
 
 app.get("/debug/calendar", async (req, res) => {
   logInfo("Debug", "Calendar access test requested");
-  
+
   // --- LOG TOKENS BEFORE API CALLS ---
-  logTokens("Debug/Calendar");
-  
+  logTokens("Debug/Calendar - BEFORE API Call");
+
   try {
     const calendarList = await calendar.calendarList.list();
     logSuccess("Debug", "Calendar access successful");
-    logInfo("Debug", "Available calendars:", calendarList.data.items?.map(cal => ({
-      id: cal.id,
-      summary: cal.summary,
-      primary: cal.primary
-    })));
-    
+    logInfo(
+      "Debug",
+      "Available calendars:",
+      calendarList.data.items?.map((cal) => ({
+        id: cal.id,
+        summary: cal.summary,
+        primary: cal.primary,
+      }))
+    );
+
+    // --- LOG TOKENS AFTER THE API CALL ---
+    logTokens("Debug/Calendar - AFTER API Call");
+
     res.json({
       status: "success",
-      calendars: calendarList.data.items?.length || 0
+      calendars: calendarList.data.items?.length || 0,
     });
-    
   } catch (error) {
     logError("Debug", "Calendar access failed", error);
     res.status(500).json({
       status: "error",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -785,12 +830,12 @@ app.use((err, req, res, next) => {
   logError("Express", "Unhandled error", err);
   res.status(500).json({
     error: "Internal server error",
-    message: err.message
+    message: err.message,
   });
 });
 
 // ===== GRACEFUL SHUTDOWN =====
-process.on('SIGTERM', () => {
+process.on("SIGTERM", () => {
   logInfo("Server", "SIGTERM received, shutting down gracefully");
   server.close(() => {
     logInfo("Server", "Server closed");
@@ -798,7 +843,10 @@ process.on('SIGTERM', () => {
   });
 });
 
-process.on('SIGINT', () => {
+process.on("SIGINT", () => {
   logInfo("Server", "SIGINT received, shutting down gracefully");
-  process.exit(0);
+  server.close(() => {
+    logInfo("Server", "Server closed");
+    process.exit(0);
+  });
 });
