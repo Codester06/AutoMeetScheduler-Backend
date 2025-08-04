@@ -30,7 +30,7 @@ const transporter = nodemailer.createTransport({
     user: process.env.G_MAIL,
     pass: process.env.SMTP_PASS, // App password (or normal SMTP password)
   },
-    timeout: 6000,
+  timeout: 6000,
 });
 
 // ===== EMAIL TEMPLATE FUNCTION =====
@@ -465,6 +465,21 @@ const logSuccess = (section, message, data = null) => {
   }
 };
 
+// --- NEW FUNCTION TO LOG TOKENS ---
+const logTokens = (section) => {
+  const credentials = oauth2Client.credentials;
+  logInfo(
+    section,
+    'Current Google OAuth Tokens',
+    {
+      accessToken: credentials.access_token ? credentials.access_token.substring(0, 20) + "..." : null,
+      refreshToken: credentials.refresh_token ? credentials.refresh_token.substring(0, 20) + "..." : null,
+      tokenExpiry: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null,
+      isExpired: credentials.expiry_date ? Date.now() > credentials.expiry_date : "unknown"
+    }
+  );
+}
+
 // ===== OAUTH CALLBACK WITH ENHANCED LOGGING =====
 app.get("/oauth2callback", async (req, res) => {
   logInfo("OAuth Callback", "Processing OAuth callback request");
@@ -563,6 +578,9 @@ app.post("/schedule", async (req, res) => {
   let emailSent = false;
   let meetLink = null;
   let calendarEventId = null;
+
+  // --- LOG TOKENS BEFORE API CALLS ---
+  logTokens("Schedule");
 
   try {
     // Calculate meeting times
@@ -726,11 +744,18 @@ app.get("/debug/tokens", (req, res) => {
   };
   
   logInfo("Debug", "Current token status:", tokenInfo);
+  // --- LOG FULL ACCESS TOKEN FOR DEBUGGING ---
+  console.log("\n🔑 [Debug] Current Full Access Token:");
+  console.log(credentials.access_token);
+  
   res.json(tokenInfo);
 });
 
 app.get("/debug/calendar", async (req, res) => {
   logInfo("Debug", "Calendar access test requested");
+  
+  // --- LOG TOKENS BEFORE API CALLS ---
+  logTokens("Debug/Calendar");
   
   try {
     const calendarList = await calendar.calendarList.list();
